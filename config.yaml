@@ -41,7 +41,7 @@ endpointer:
   noise_adaption: 0.05        # how fast the idle noise estimate follows the room
 
 transcription:
-  languages: [de]                  # only German is spoken here; one entry skips detection
+  languages: [de, en]              # German meeting with some English; detected per utterance
   model_size: small           # tiny | base | small | medium | large-v3
   device: cpu                 # cpu | cuda
   compute_type: int8

@@ -13,6 +13,12 @@
 #   make status             is it running, and what has it written
 #   make logs               follow the background transcript live
 #
+#   make meeting            German meeting: transcribe what the meeting plays
+#                           (no microphone), translate to English and read it
+#                           aloud on the speakers while your mic is muted.
+#                           Ctrl-C stops both. Linux/PipeWire; needs `make voice`.
+#   make voice              install the offline English voice (piper)
+#
 #   make test               fast unit suite (no model, no microphone)
 #   make lint               style guards: ruff check + ruff format --check (as CI runs them)
 #   make format             reformat and auto-fix what ruff can
@@ -32,10 +38,13 @@ RUN_DIR  := var
 PID_FILE := $(RUN_DIR)/soundvibes.pid
 LOG_FILE := $(RUN_DIR)/soundvibes.log
 STOP_TIMEOUT := 15
+VOICE_DIR ?= $(HOME)/.local/share/piper-voices
+VOICE     ?= en_US-lessac-medium
 
 # Commands, as opposed to language arguments.
 COMMANDS := help start start-d stop _stop-pid restart status logs install \
-            offline test lint format selftest clean venv translate-ready
+            offline test lint format selftest clean venv translate-ready \
+            meeting voice
 
 # Anything else on the command line is a language: `make start fr de`
 COMMA := ,
@@ -138,6 +147,29 @@ _stop-pid:
 
 restart: stop start-d
 
+# Captures the default sink's monitor (what the meeting plays), never a mic.
+# Both run in the background so either one dying stops the other; background
+# jobs ignore SIGINT in a non-interactive shell, so Ctrl-C reaches them as
+# SIGTERM from the trap - which also lets soundvibes drain its queue.
+meeting: venv translate-ready
+	@test -f $(VOICE_DIR)/$(VOICE).onnx || { \
+	  echo "No voice at $(VOICE_DIR)/$(VOICE).onnx. Run 'make voice' first."; exit 1; }
+	@mkdir -p $(RUN_DIR) $(dir $(OUTPUT))
+	@echo "Meeting mode: German -> English, read aloud while your mic is muted."
+	@echo "  transcript : $(OUTPUT)"
+	@echo "  English    : $(dir $(OUTPUT))translate.EN.txt"
+	@echo "Press Ctrl-C to stop."
+	@echo
+	@PIPEWIRE_PROPS='{ stream.capture.sink=true }' $(PYTHON) soundvibes.py -o $(OUTPUT) \
+	  --system-device pipewire --no-mic --translate en >> $(LOG_FILE) 2>&1 & sv=$$!; \
+	$(PYTHON) speak.py --transcript $(OUTPUT) \
+	  --translation $(dir $(OUTPUT))translate.EN.txt \
+	  --voice $(VOICE_DIR)/$(VOICE).onnx & sp=$$!; \
+	trap 'kill $$sv $$sp 2>/dev/null' INT TERM; \
+	wait -n $$sv $$sp; \
+	kill $$sv $$sp 2>/dev/null; wait $$sv $$sp 2>/dev/null; \
+	echo; echo "Stopped. Transcription log: $(LOG_FILE)"
+
 status:
 	@if [ -f $(PID_FILE) ] && kill -0 "$$(cat $(PID_FILE))" 2>/dev/null; then \
 	  echo "running in the background (pid $$(cat $(PID_FILE)))"; \
@@ -162,6 +194,12 @@ offline: venv
 	@echo "Installing offline translation (this is large: stanza, spacy, torch)..."
 	@$(PIP) install -r requirements-translate.txt
 	@$(PYTHON) offline_setup.py
+
+voice: venv
+	@$(PIP) install -r requirements-voice.txt
+	@mkdir -p $(VOICE_DIR)
+	@cd $(VOICE_DIR) && $(abspath $(PYTHON)) -m piper.download_voices $(VOICE)
+	@echo "Voice ready: $(VOICE_DIR)/$(VOICE).onnx"
 
 # ── checks ───────────────────────────────────────────────────────────────
 

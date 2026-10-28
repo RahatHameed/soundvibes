@@ -33,6 +33,8 @@ Everything is a make target:
 | `make stop` | stop a running transcription, background or inline (drains the queue first) |
 | `make status` | is it running, and what has it written |
 | `make logs` | follow the background transcript live |
+| `make meeting` | German meeting: hear it in English on the speakers (see Meeting mode) |
+| `make voice` | install the offline English voice used by `make meeting` |
 | `make test` | fast unit suite — no model, no microphone |
 | `make lint` | style guards: ruff lint + formatting check, exactly as CI runs them |
 | `make format` | reformat and auto-fix what ruff can |
@@ -227,6 +229,31 @@ the original line is echoed first, and its translations follow when they are rea
 each carrying the original's timestamp. The translation models are loaded while
 soundvibes starts listening ("Translation ready." marks the end of that), and
 Ctrl-C finishes the queued translations before exiting.
+
+## Meeting mode: hear a German meeting in English
+
+Live captions already show the German; `make meeting` lets you *hear* it in
+English. It transcribes only what the meeting plays (no microphone), translates
+German to English, and reads the English aloud on the built-in speakers.
+Linux with PipeWire only.
+
+```bash
+make voice        # once: offline English voice (piper, ~60 MB)
+make meeting      # Ctrl-C stops both the transcription and the voice
+```
+
+- **Capture** is the default sink's monitor, so the meeting must play on the
+  default output (e.g. your headset). The voice plays on the speakers instead,
+  so soundvibes never hears and re-translates itself.
+- **German only is read.** Speech already in English is not spoken; set
+  `transcription.languages` to include `en` so it is detected rather than
+  forced through as German.
+- **Mute gate.** The voice plays only while every microphone the browser is
+  capturing is muted at the system level (`wpctl set-mute <id> 1`). Unmuting
+  cuts the current sentence at once; if the state cannot be read, it stays
+  silent. The meeting app's own mute button is not visible from outside the
+  browser, so it does not count.
+- When it falls behind, older lines are skipped so it stays live.
 
 ## Configuration
 
